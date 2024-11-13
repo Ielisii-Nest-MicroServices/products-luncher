@@ -1,0 +1,69 @@
+services:
+  nats-server:
+    image: nats:latest
+    ports:
+      - 8222:8222
+  sqlServer:
+    container_name: SQL-Server
+    image: mcr.microsoft.com/mssql/server:latest
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=Nacho123!
+      - TZ=America/Argentina/Buenos_Aires
+    ports:
+      - 1433:1433
+    volumes:
+      - nuevosdesarrolos_sqlserver_data:/var/opt/mssql
+
+    restart: always
+
+  orders-db:
+    container_name: Orders_DB
+    image: postgres:16.2
+    restart: always
+    volumes:
+      - ./order-ms/postgres:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=123456
+      - POSTGRES_DB=ordersdb
+
+  client-gateway:
+    build: ./client-gateway
+    ports:
+      - ${GATEWEY_PORT}:3000
+    volumes:
+      - ./client-gateway/src:/usr/src/app/src
+    command: npm run start:dev
+    environment:
+      - PORT=3000
+      - NATS_SERVERS=nats://nats-server:4222
+
+  products-ms:
+    depends_on:
+      - sqlServer
+    build: ./products-ms
+    volumes:
+      - ./products-ms/src:/usr/src/app/src
+    command: npm run start:dev
+    environment:
+      - PORT=3001
+      - NATS_SERVERS=nats://nats-server:4222
+      - DATABASE_URL=sqlserver://sqlServer:1433;database=mydb;user=sa;password=Nacho123!;trustServerCertificate=true;
+  orders-ms:
+    depends_on:
+      - orders-db
+    build: ./order-ms
+    volumes:
+      - ./order-ms/src:/usr/src/app/src
+    command: npm run start:dev
+    environment:
+      - PORT=3002
+      - NATS_SERVERS=nats://nats-server:4222
+      - DATABASE_URL=postgresql://postgres:123456@orders-db:5432/ordersdb?schema=public
+
+volumes:
+  nuevosdesarrolos_sqlserver_data:
+    external: true
